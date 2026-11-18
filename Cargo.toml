@@ -1,0 +1,26 @@
+[package]
+name = "ecies-post-quantum"
+version = "0.1.0"
+# docs
+authors = ["Weiliang Li <to.be.impressive@gmail.com>"]
+description = "Post-quantum Cryptography Integrated Encryption Scheme in Rust"
+edition = "2024"
+rust-version = "1.87"
+keywords = [ # at most five
+  "post-quantum",
+  "ml-kem",
+  "ecies",
+  "encryption",
+  "cryptography",
+]
+categories = ["cryptography", "no-std", "wasm"]
+license = "MIT"
+readme = "README.md"
+# links
+documentation = "https://docs.rs/ecies-post-quantum/latest/ecies_post_quantum/"
+repository = "https://github.com/ecies/rs-post-quantum"
+
+[dependencies]
+
+[features]
+default = []

@@ -1,0 +1,36 @@
+{
+  // Version of the setting file.  Always 0.2
+  "version": "0.2",
+  // language - current active spelling language
+  "language": "en",
+  // words - list of words to be always considered correct
+  "words": [
+    "chacha",
+    "consts",
+    "Cryspen",
+    "ecies",
+    "eciesjs",
+    "eciesrs",
+    "FIPS",
+    "getrandom",
+    "keypair",
+    "libcrux",
+    "msrv",
+    "wasip2",
+    "xchacha"
+  ],
+  // flagWords - list of words to be always considered incorrect
+  // This is useful for offensive words and common spelling errors.
+  // For example "hte" should be "the"
+  "flagWords": [
+    "hte"
+  ],
+  "ignorePaths": [
+    ".git",
+    ".github",
+    ".gitignore",
+    ".cspell.jsonc",
+    "LICENSE",
+    "Cargo.lock"
+  ]
+}
