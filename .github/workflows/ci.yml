@@ -29,21 +29,56 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # vcpkg builds OpenSSL from source, so cache its binary archives per runner image, which pins the compiler and ports
+      - name: Get vcpkg cache key on Windows
+        run: echo "VCPKG_CACHE_KEY=vcpkg-openssl-$env:ImageOS-$env:ImageVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+        if: matrix.os == 'windows-latest'
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: ${{ env.VCPKG_CACHE_KEY }}
+        if: matrix.os == 'windows-latest'
+
+      - name: Install OpenSSL on Windows
+        run: |
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+          New-Item -ItemType "directory" -Path "C:\vcpkg\downloads" -Force
+          Invoke-WebRequest -URI "$env:BASE_URL/$env:FILE_NAME" -OutFile "C:\vcpkg\downloads\$env:FILE_NAME"
+          vcpkg install openssl:x64-windows-static-md
+        if: matrix.os == 'windows-latest'
+        env:
+          BASE_URL: https://github.com/microsoft/vcpkg/files/12073957
+          FILE_NAME: nasm-2.16.01-win64.zip
+
       - name: Format
         run: cargo fmt --check
 
-      # new lints on beta and nightly should not break the build
-      - name: Lint
+      # new lints on beta and nightly should not break the build.
+      # one command per step: on Windows, pwsh fails a step only on its last command
+      - name: Lint (pure Rust)
         run: cargo clippy --all-targets -- -D warnings
         if: matrix.toolchain == 'stable'
 
+      - name: Lint (OpenSSL AES)
+        run: cargo clippy --all-targets --features aes-openssl -- -D warnings
+        if: matrix.toolchain == 'stable'
+
       - name: Check doc
-        run: cargo doc --no-deps
+        run: cargo doc --no-deps --features aes-openssl
         env:
           RUSTDOCFLAGS: -D warnings
 
-      - name: Test
+      - name: Test (pure Rust)
         run: cargo test
+
+      - name: Test (OpenSSL AES)
+        run: cargo test --features aes-openssl
+
+      # adds the over 2 GiB test, which needs about 4 GB of memory and is too slow in debug builds
+      - name: Test (OpenSSL AES, release)
+        run: cargo test --release --features aes-openssl
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
 
       - name: Check cargo package
         run: cargo publish --dry-run
@@ -65,3 +100,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - run: cargo build
+      # no OpenSSL on the Windows runner without the vcpkg steps above
+      - run: cargo build --features aes-openssl
+        if: matrix.os != 'windows-latest'
