@@ -2,6 +2,9 @@ use ecies_post_quantum::config::{AsymmetricAlgorithm, Config};
 use ecies_post_quantum::utils::keypair_from_seed;
 use ecies_post_quantum::{Error, decrypt_with_config, encrypt_with_config};
 use sha3::{Digest, Sha3_256};
+// wasm-bindgen-test runs only its own test attribute
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 const MSG: &[u8] = b"hello world";
 

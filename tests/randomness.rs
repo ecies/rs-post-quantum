@@ -1,6 +1,9 @@
 use ecies_post_quantum::config::AsymmetricAlgorithm;
 use ecies_post_quantum::encrypt;
 use ecies_post_quantum::utils::{generate_keypair, generate_seed};
+// wasm-bindgen-test runs only its own test attribute
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 #[test]
 fn encapsulates_with_fresh_randomness() {

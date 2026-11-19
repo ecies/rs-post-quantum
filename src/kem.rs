@@ -127,6 +127,10 @@ parameter_set!(
 
 #[cfg(test)]
 mod tests {
+    // wasm-bindgen-test runs only its own test attribute
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     use super::*;
 
     /// What `@noble/post-quantum` 0.4.1's `decapsulate` returns for an all-zero ciphertext and the seed 0 to 63. The

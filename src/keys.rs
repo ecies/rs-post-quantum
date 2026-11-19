@@ -154,6 +154,10 @@ pub fn keypair_from_seed(algorithm: AsymmetricAlgorithm, seed: &[u8; SEED_LENGTH
 
 #[cfg(test)]
 mod tests {
+    // wasm-bindgen-test runs only its own test attribute
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
     use super::*;
 
     #[test]

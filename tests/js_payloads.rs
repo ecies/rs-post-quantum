@@ -1,6 +1,9 @@
 use ecies_post_quantum::config::{AsymmetricAlgorithm, Config, NonceLength, SymmetricAlgorithm};
 use ecies_post_quantum::decrypt_with_config;
 use ecies_post_quantum::utils::keypair_from_seed;
+// wasm-bindgen-test runs only its own test attribute
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 /// `encrypt(publicKey, "hello world", config)` of `@ecies/post-quantum` 0.0.2, to the keys that `keygen(seed)` derives
 /// from the seed 0, 1, ..., 63. One per line: the config in its JS names, then the payload in hex.
