@@ -50,7 +50,7 @@ pub(crate) fn sym_encrypt_into(
 /// Appends `nonce || tag || encrypted` to `output`, using the given nonce.
 ///
 /// On failure, `output` is left as it was.
-pub(crate) fn encrypt_into_with_nonce(
+fn encrypt_into_with_nonce(
     output: &mut Vec<u8>,
     algorithm: SymmetricAlgorithm,
     nonce_length: NonceLength,

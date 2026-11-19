@@ -250,7 +250,6 @@ fn encrypts_known_vectors_after_existing_bytes() {
 #[cfg(feature = "aes-openssl")]
 mod openssl_backend {
     use super::super::{Aes256Gcm12, Aes256Gcm16, aead, openssl_aes};
-    use super::{NonceLength, SymmetricAlgorithm, Vec, sym_decrypt, sym_encrypt};
 
     fn rust_encrypt(output: &mut alloc::vec::Vec<u8>, key: &[u8], nonce: &[u8], msg: &[u8]) -> Option<()> {
         match nonce.len() {
@@ -305,12 +304,16 @@ mod openssl_backend {
         assert_eq!(output, b"ml-kem ciphertext");
     }
 
+    // 32-bit targets can't hold a slice over `isize::MAX`, which is `i32::MAX` there, so the panic can't happen
+    #[cfg(target_pointer_width = "64")]
     #[test]
     #[cfg_attr(
         debug_assertions,
         ignore = "allocates about 4 GiB, so it runs in release builds only"
     )]
     fn encrypts_and_decrypts_more_than_2_gib() {
+        use super::{NonceLength, SymmetricAlgorithm, Vec, sym_decrypt, sym_encrypt};
+
         // 251 is odd, so the pattern never repeats at a power-of-two distance, and misplaced bytes show
         fn byte_at(i: usize) -> u8 {
             (i % 251) as u8

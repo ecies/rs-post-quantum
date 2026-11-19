@@ -21,11 +21,12 @@ documentation = "https://docs.rs/ecies-post-quantum/latest/ecies_post_quantum/"
 repository = "https://github.com/ecies/rs-post-quantum"
 
 [dependencies]
-# symmetric ciphers
-aes-gcm = { version = "0.11.1", default-features = false, features = ["aes"] }
-chacha20poly1305 = { version = "0.11.0", default-features = false }
+# symmetric ciphers. zeroize wipes their key state on drop
+aes-gcm = { version = "0.11.1", default-features = false, features = ["aes", "zeroize"] }
+chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["zeroize"] }
 # aes (openssl)
 openssl = { version = "0.10.81", default-features = false, optional = true } # msrv 1.80
+zeroize = { version = "1.9.2", default-features = false, optional = true }
 
 # random number generator. on wasm32-unknown-unknown, the application picks the backend (see README)
 getrandom = { version = "0.4.3", default-features = false }
@@ -33,7 +34,7 @@ getrandom = { version = "0.4.3", default-features = false }
 [features]
 default = []
 # OpenSSL AES-256-GCM instead of the pure Rust one. XChaCha20-Poly1305 stays pure Rust
-aes-openssl = ["dep:openssl"]
+aes-openssl = ["dep:openssl", "dep:zeroize"]
 
 [dev-dependencies]
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }

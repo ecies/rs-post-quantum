@@ -1,4 +1,5 @@
 use openssl::symm::{Cipher, Crypter, Mode};
+use zeroize::Zeroize;
 
 use alloc::vec::Vec;
 
@@ -43,15 +44,21 @@ pub(super) fn decrypt(key: &[u8], nonce_length: usize, encrypted: &[u8]) -> Opti
     let mut crypter = Crypter::new(Cipher::aes_256_gcm(), Mode::Decrypt, key, Some(nonce)).ok()?;
 
     let mut plain = alloc::vec![0u8; encrypted.len()];
-    update_all(&mut crypter, encrypted, &mut plain)?;
     // the same order as rust-openssl's `decrypt_aead`: the tag goes in after the data, before finalizing
-    crypter.set_tag(tag).ok()?;
-    finalize(&mut crypter)?;
+    let result = update_all(&mut crypter, encrypted, &mut plain)
+        .and_then(|()| crypter.set_tag(tag).ok())
+        .and_then(|()| finalize(&mut crypter));
+    if result.is_none() {
+        // OpenSSL writes the plaintext before it checks the tag, so wipe what failed the check
+        plain.as_mut_slice().zeroize();
+        return None;
+    }
     Some(plain)
 }
 
 /// Runs `input` through the cipher into `output`, which has the same length
 fn update_all(crypter: &mut Crypter, input: &[u8], output: &mut [u8]) -> Option<()> {
+    debug_assert_eq!(input.len(), output.len());
     for (input, output) in input.chunks(CHUNK_LENGTH).zip(output.chunks_mut(CHUNK_LENGTH)) {
         // AES-GCM writes exactly as many bytes as it reads
         if crypter.update(input, output).ok()? != input.len() {
