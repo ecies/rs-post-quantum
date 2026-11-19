@@ -11,3 +11,10 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
+
+  # the @ecies/post-quantum that the interop job tests against
+  - package-ecosystem: npm
+    directory: "/tests/js"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
