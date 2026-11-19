@@ -1,6 +1,6 @@
 use ecies_post_quantum::config::{AsymmetricAlgorithm, Config};
 use ecies_post_quantum::utils::keypair_from_seed;
-use ecies_post_quantum::{decrypt_with_config, encrypt_with_config};
+use ecies_post_quantum::{Error, decrypt_with_config, encrypt_with_config};
 use sha3::{Digest, Sha3_256};
 
 const MSG: &[u8] = b"hello world";
@@ -61,5 +61,25 @@ fn decrypts_with_the_seed_as_with_the_expanded_key() {
             Ok(MSG),
             "{asymmetric_algorithm:?} expanded key"
         );
+    }
+}
+
+#[test]
+fn rejects_a_payload_for_another_seed() {
+    // a byte of d, which the key pair is derived from. z, the last 32 bytes, only feeds implicit rejection, so a
+    // seed that differs only there still decrypts every valid payload
+    let mut other_seed = seed();
+    other_seed[0] ^= 1;
+    for (asymmetric_algorithm, _, _) in NOBLE_KEYS {
+        let config = Config {
+            asymmetric_algorithm,
+            ..Config::default()
+        };
+        let (_, pk) = keypair_from_seed(asymmetric_algorithm, &seed());
+        let encrypted = encrypt_with_config(pk.as_bytes(), MSG, &config).unwrap();
+
+        // any 64 bytes are a valid seed, so a wrong one fails at authentication, like a wrong expanded key
+        let result = decrypt_with_config(&other_seed, &encrypted, &config);
+        assert_eq!(result, Err(Error::InvalidMessage), "{asymmetric_algorithm:?}");
     }
 }
