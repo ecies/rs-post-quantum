@@ -1,0 +1,33 @@
+name: Audit
+
+on:
+  push:
+    branches: [main]
+
+  pull_request:
+    branches: [main]
+
+  # advisories come out between commits, and libcrux is pinned exactly, so its fixes need a release of this crate
+  schedule:
+    - cron: "0 0 * * 1"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@cargo-audit
+
+      # no lockfile in the repo, so audit what a fresh build resolves.
+      # fails on any advisory, including unsound, unmaintained and notices, which plain `cargo audit` lets pass.
+      # RUSTSEC-2026-0173: proc-macro-error2 is unmaintained, reached only under libcrux-intrinsics' `cfg(hax)`
+      - run: cargo generate-lockfile
+      - run: cargo audit --deny warnings --ignore RUSTSEC-2026-0173

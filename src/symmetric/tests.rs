@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 
 use super::{encrypt_into_with_nonce, sym_decrypt, sym_encrypt, sym_encrypt_into};
 use crate::config::{NonceLength, SymmetricAlgorithm};
+use crate::error::Error;
 
 /// A known vector, copied from eciesrs, which uses the same `nonce || tag || encrypted` layout
 struct Known {
@@ -192,7 +193,7 @@ fn leaves_existing_bytes_untouched_when_encryption_fails() {
     for (algorithm, nonce_length, _) in CIPHERS {
         let mut output = b"ml-kem ciphertext".to_vec();
         let result = sym_encrypt_into(&mut output, algorithm, nonce_length, &[7u8; 31], b"hello world");
-        assert_eq!(result, None, "{algorithm:?} {nonce_length:?}");
+        assert_eq!(result, Err(Error::InvalidMessage), "{algorithm:?} {nonce_length:?}");
         assert_eq!(output, b"ml-kem ciphertext", "{algorithm:?} {nonce_length:?}");
     }
 }
