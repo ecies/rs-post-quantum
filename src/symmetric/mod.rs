@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use crate::config::{NonceLength, SymmetricAlgorithm};
 use crate::consts::XCHACHA20_NONCE_LENGTH;
+use crate::error::Error;
 
 mod aead;
 #[cfg(feature = "aes-openssl")]
@@ -25,26 +26,28 @@ pub fn sym_encrypt(
     plain: &[u8],
 ) -> Option<Vec<u8>> {
     let mut output = Vec::new();
-    sym_encrypt_into(&mut output, algorithm, nonce_length, key, plain)?;
+    sym_encrypt_into(&mut output, algorithm, nonce_length, key, plain).ok()?;
     Some(output)
 }
 
-/// Same as [`sym_encrypt`], but appends to `output`, which is left as it was on failure
+/// Same as [`sym_encrypt`], but appends to `output`, which is left as it was on failure.
+///
+/// Fails with [`Error::RngFailure`] if no nonce can be drawn, and with [`Error::InvalidMessage`] if the cipher fails.
 pub(crate) fn sym_encrypt_into(
     output: &mut Vec<u8>,
     algorithm: SymmetricAlgorithm,
     nonce_length: NonceLength,
     key: &[u8],
     plain: &[u8],
-) -> Option<()> {
+) -> Result<(), Error> {
     let nonce_size = match algorithm {
         SymmetricAlgorithm::Aes256Gcm => nonce_length as usize,
         SymmetricAlgorithm::XChaCha20 => XCHACHA20_NONCE_LENGTH,
     };
     let mut nonce = [0u8; XCHACHA20_NONCE_LENGTH];
     let nonce = &mut nonce[..nonce_size];
-    getrandom::fill(nonce).ok()?;
-    encrypt_into_with_nonce(output, algorithm, nonce_length, key, nonce, plain)
+    getrandom::fill(nonce).map_err(|_| Error::RngFailure)?;
+    encrypt_into_with_nonce(output, algorithm, nonce_length, key, nonce, plain).ok_or(Error::InvalidMessage)
 }
 
 /// Appends `nonce || tag || encrypted` to `output`, using the given nonce.

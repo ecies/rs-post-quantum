@@ -75,6 +75,25 @@ jobs:
         run: cargo test --release --features aes-openssl
         if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
 
+      - uses: taiki-e/install-action@cargo-llvm-cov
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
+
+      # one report for both AES backends, since each compiles out the other's code
+      - name: Coverage
+        run: |
+          rustup component add llvm-tools-preview
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov --no-report
+          cargo llvm-cov --no-report --features aes-openssl
+          cargo llvm-cov report --lcov --output-path .lcov.info
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
+
+      - uses: codecov/codecov-action@v7
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
+        with:
+          files: .lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Check cargo package
         run: cargo publish --dry-run
         if: matrix.os == 'ubuntu-latest'
@@ -89,7 +108,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.87.0 # msrv
+          toolchain: 1.94.0 # msrv
 
       - run: cargo generate-lockfile
       - uses: Swatinem/rust-cache@v2
