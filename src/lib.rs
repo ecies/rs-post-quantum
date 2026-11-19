@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 
 use config::Config;
 pub use error::Error;
-pub use keys::{PublicKey, SecretKey};
+pub use keys::{PublicKey, SecretKey, Seed};
 
 /// Encrypts `msg` to an ML-KEM-768 public key with the default [`Config`].
 ///
