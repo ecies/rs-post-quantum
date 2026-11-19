@@ -14,6 +14,17 @@ This is the Rust version of [`@ecies/post-quantum`](https://github.com/ecies/js-
 - Payload format: `ML-KEM ciphertext || nonce || tag || encrypted data`, where the ML-KEM shared secret is the symmetric key
 - `no_std` with `alloc`, and builds on WASM
 
+## WASM
+
+On `wasm32-unknown-unknown`, the random nonce comes from [`getrandom`](https://docs.rs/getrandom), which has no default source there. In a browser or Node.js, enable its `wasm_js` feature in your own crate:
+
+```toml
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+```
+
+For other runtimes, see getrandom's [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends).
+
 ## Changelog
 
 See [CHANGELOG.md](./CHANGELOG.md).
