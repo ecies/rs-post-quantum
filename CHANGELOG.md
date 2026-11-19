@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Initial package structure
-- Add `symmetric::sym_encrypt` and `symmetric::sym_decrypt`: AES-256-GCM (16 or 12 bytes nonce) or XChaCha20-Poly1305, with the `nonce || tag || encrypted` payload of `@ecies/post-quantum`
+- Add `config::SymmetricAlgorithm`, `config::NonceLength` and `consts::XCHACHA20_NONCE_LENGTH`: AES-256-GCM (16 or 12 bytes nonce) or XChaCha20-Poly1305 (24 bytes nonce), with the `nonce || tag || encrypted` layout of `@ecies/post-quantum`
 - Add the `aes-openssl` feature to run AES-256-GCM on OpenSSL instead of pure Rust
 - Add `encrypt`, `decrypt`, `encrypt_with_config` and `decrypt_with_config`, with the payload of `@ecies/post-quantum`: ML-KEM-512, 768 (default) or 1024, whose shared secret is the symmetric key
 - Add `config::Config` and `config::AsymmetricAlgorithm`, with the same defaults as `@ecies/post-quantum`

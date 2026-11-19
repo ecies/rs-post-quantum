@@ -9,14 +9,13 @@ extern crate alloc;
 pub mod config;
 /// Constant values
 pub mod consts;
-/// Symmetric encryption/decryption
-pub mod symmetric;
 /// Key generation
 pub mod utils;
 
 mod error;
 mod kem;
 mod keys;
+mod symmetric;
 
 use alloc::vec::Vec;
 

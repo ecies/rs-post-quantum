@@ -1,8 +1,15 @@
 use alloc::vec::Vec;
 
-use super::{encrypt_into_with_nonce, sym_decrypt, sym_encrypt, sym_encrypt_into};
+use super::{encrypt_into_with_nonce, sym_decrypt, sym_encrypt_into};
 use crate::config::{NonceLength, SymmetricAlgorithm};
 use crate::error::Error;
+
+/// Symmetric encryption into a new buffer, which holds only `nonce || tag || encrypted`
+fn sym_encrypt(algorithm: SymmetricAlgorithm, nonce_length: NonceLength, key: &[u8], plain: &[u8]) -> Option<Vec<u8>> {
+    let mut output = Vec::new();
+    sym_encrypt_into(&mut output, algorithm, nonce_length, key, plain).ok()?;
+    Some(output)
+}
 
 /// A known vector, copied from eciesrs, which uses the same `nonce || tag || encrypted` layout
 struct Known {
@@ -247,7 +254,8 @@ fn encrypts_known_vectors_after_existing_bytes() {
     }
 }
 
-/// With `aes-openssl`, the public functions above run on OpenSSL. These tests check it against pure Rust AES directly
+/// With `aes-openssl`, `sym_encrypt_into` and `sym_decrypt` run AES on OpenSSL, and so do the tests above.
+/// These tests check it against pure Rust AES directly
 #[cfg(feature = "aes-openssl")]
 mod openssl_backend {
     use super::super::{Aes256Gcm12, Aes256Gcm16, aead, openssl_aes};
@@ -298,7 +306,7 @@ mod openssl_backend {
 
     #[test]
     fn leaves_existing_bytes_untouched_when_openssl_fails() {
-        // OpenSSL refuses an empty nonce, which the public functions never pass on
+        // OpenSSL refuses an empty nonce, which `sym_encrypt_into` never passes on
         let mut output = b"ml-kem ciphertext".to_vec();
         let result = openssl_aes::encrypt_into(&mut output, &[7u8; 32], &[], b"hello world");
         assert_eq!(result, None);
