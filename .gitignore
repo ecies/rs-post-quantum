@@ -13,3 +13,6 @@ Cargo.lock
 .lcov.info
 codecov
 codecov.*
+
+# the interop scripts' dependencies
+node_modules/

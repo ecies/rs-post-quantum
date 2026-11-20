@@ -2,8 +2,10 @@ use ecies_post_quantum::config::{AsymmetricAlgorithm, Config, NonceLength, Symme
 use ecies_post_quantum::decrypt_with_config;
 use ecies_post_quantum::utils::keypair_from_seed;
 
-/// `encrypt(publicKey, "hello world", config)` of `@ecies/post-quantum` 0.0.2 (commit 6b34b87), to the keys that
-/// `keygen(seed)` derives from the seed 0, 1, ..., 63. One per line: the config in its JS names, then the payload in hex.
+/// `encrypt(publicKey, "hello world", config)` of `@ecies/post-quantum` 0.0.2, to the keys that `keygen(seed)` derives
+/// from the seed 0, 1, ..., 63. One per line: the config in its JS names, then the payload in hex.
+///
+/// Made by `node tests/js/payloads.mjs encrypt`, after `npm ci` in `tests/js`. CI also runs this test on fresh ones.
 const JS_PAYLOADS: &str = include_str!("js_payloads.txt");
 
 const MSG: &[u8] = b"hello world";

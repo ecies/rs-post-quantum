@@ -117,3 +117,51 @@ jobs:
       # no OpenSSL on the Windows runner without the vcpkg steps above
       - run: cargo build --features aes-openssl
         if: matrix.os != 'windows-latest'
+
+  # payloads between this crate and @ecies/post-quantum in both directions, through libcrux's AVX2 and NEON code
+  interop:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash # with pipefail, so a failure before `tee` fails the step
+    steps:
+      - uses: actions/checkout@v7
+
+      # libcrux picks its AVX2 code at runtime, and would quietly fall back to its portable code without it
+      - name: Check for AVX2
+        run: grep -qw avx2 /proc/cpuinfo
+        if: matrix.os == 'ubuntu-latest'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/js/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - run: cargo generate-lockfile
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install @ecies/post-quantum
+        run: npm ci --ignore-scripts
+        working-directory: tests/js
+
+      - name: Rust to JS
+        run: |
+          cargo run --example rust_payloads | tee rust_payloads.txt
+          node tests/js/payloads.mjs decrypt rust_payloads.txt
+          cargo run --example rust_payloads --features aes-openssl | tee rust_payloads.txt
+          node tests/js/payloads.mjs decrypt rust_payloads.txt
+
+      # replaces the committed payloads with fresh ones, printed so that a failure can be reproduced
+      - name: JS to Rust (fresh payloads)
+        run: |
+          node tests/js/payloads.mjs encrypt | tee tests/js_payloads.txt
+          cargo test --test js_payloads
+          cargo test --test js_payloads --features aes-openssl

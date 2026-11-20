@@ -1,0 +1,9 @@
+{
+  "name": "ecies-post-quantum-interop",
+  "description": "Payloads between ecies-post-quantum and @ecies/post-quantum, in both directions",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ecies/post-quantum": "0.0.2"
+  }
+}
