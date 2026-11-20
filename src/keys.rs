@@ -1,8 +1,9 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::fmt;
 
 use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
 use crate::config::AsymmetricAlgorithm;
 use crate::error::Error;
@@ -70,11 +71,68 @@ impl PublicKey {
     }
 }
 
+/// A 64 bytes ML-KEM seed (`d || z` in FIPS 203): the compact form of a secret key, for any parameter set.
+///
+/// Its bytes are kept on the heap, so moving a `Seed` doesn't copy them. They are zeroized on drop, compared in
+/// constant time, and left out of `Debug`.
+pub struct Seed(Box<[u8; SEED_LENGTH]>);
+
+impl Seed {
+    /// The seed bytes, which [`keypair_from_seed`] and [`decrypt`](crate::decrypt) take
+    pub fn as_bytes(&self) -> &[u8; SEED_LENGTH] {
+        &self.0
+    }
+}
+
+impl Drop for Seed {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for Seed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Seed").finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for Seed {
+    fn eq(&self, other: &Self) -> bool {
+        bool::from(self.0[..].ct_eq(&other.0[..]))
+    }
+}
+
+impl Eq for Seed {}
+
 /// Generates a key pair from the system random number generator
 pub fn generate_keypair(algorithm: AsymmetricAlgorithm) -> Result<(SecretKey, PublicKey), Error> {
-    let mut seed = Zeroizing::new([0u8; SEED_LENGTH]);
-    getrandom::fill(seed.as_mut()).map_err(|_| Error::RngFailure)?;
-    Ok(keypair_from_seed(algorithm, &seed))
+    let seed = generate_seed()?;
+    Ok(keypair_from_seed(algorithm, seed.as_bytes()))
+}
+
+/// Draws a [`Seed`] from the system random number generator.
+///
+/// The seed is the compact form of a secret key: store it instead of the expanded key, derive the public key with
+/// [`keypair_from_seed`], and pass its bytes to [`decrypt`](crate::decrypt) as the secret key. It doesn't record the
+/// parameter set, so derive the keys and decrypt with the same one. The `Seed` is wiped on drop, but copies of its
+/// bytes, such as the stored one, are up to the caller.
+///
+/// ```
+/// use ecies_post_quantum::config::AsymmetricAlgorithm;
+/// use ecies_post_quantum::utils::{generate_seed, keypair_from_seed};
+/// use ecies_post_quantum::{decrypt, encrypt};
+///
+/// let seed = generate_seed().unwrap();
+/// let (_, pk) = keypair_from_seed(AsymmetricAlgorithm::MlKem768, seed.as_bytes());
+///
+/// let encrypted = encrypt(pk.as_bytes(), b"hello").unwrap();
+/// assert_eq!(decrypt(seed.as_bytes(), &encrypted).unwrap(), b"hello");
+/// ```
+pub fn generate_seed() -> Result<Seed, Error> {
+    // filled in place on the heap, so no copy is left in this frame
+    let mut seed = Seed(Box::new([0u8; SEED_LENGTH]));
+    getrandom::fill(&mut seed.0[..]).map_err(|_| Error::RngFailure)?;
+    Ok(seed)
 }
 
 /// Derives a key pair from a 64 bytes seed (`d || z` in FIPS 203), the same as `keygen(seed)` in `@noble/post-quantum`.
@@ -92,4 +150,22 @@ pub fn keypair_from_seed(algorithm: AsymmetricAlgorithm, seed: &[u8; SEED_LENGTH
             bytes: public_key,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn seeds_are_equal_only_with_every_byte_the_same() {
+        // `generate_seed` never gives two seeds one byte apart, so they are built here
+        let seed = |bytes: [u8; SEED_LENGTH]| Seed(Box::new(bytes));
+        assert!(seed([7u8; SEED_LENGTH]) == seed([7u8; SEED_LENGTH]));
+
+        for position in 0..SEED_LENGTH {
+            let mut one_byte_changed = [7u8; SEED_LENGTH];
+            one_byte_changed[position] = 8;
+            assert!(seed([7u8; SEED_LENGTH]) != seed(one_byte_changed), "byte {position}");
+        }
+    }
 }

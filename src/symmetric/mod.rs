@@ -16,21 +16,8 @@ type Aes256Gcm12 = aes_gcm::AesGcm<aes_gcm::aes::Aes256, aes_gcm::aead::consts::
 #[cfg(any(test, not(feature = "aes-openssl")))]
 type Aes256Gcm16 = aes_gcm::AesGcm<aes_gcm::aes::Aes256, aes_gcm::aead::consts::U16>;
 
-/// Symmetric encryption with a random nonce, returning `nonce || tag || encrypted`.
-///
-/// Returns `None` if the key is malformed or the system random number generator fails.
-pub fn sym_encrypt(
-    algorithm: SymmetricAlgorithm,
-    nonce_length: NonceLength,
-    key: &[u8],
-    plain: &[u8],
-) -> Option<Vec<u8>> {
-    let mut output = Vec::new();
-    sym_encrypt_into(&mut output, algorithm, nonce_length, key, plain).ok()?;
-    Some(output)
-}
-
-/// Same as [`sym_encrypt`], but appends to `output`, which is left as it was on failure.
+/// Symmetric encryption with a random nonce, appending `nonce || tag || encrypted` to `output`, which is left as it
+/// was on failure.
 ///
 /// Fails with [`Error::RngFailure`] if no nonce can be drawn, and with [`Error::InvalidMessage`] if the cipher fails.
 pub(crate) fn sym_encrypt_into(
@@ -70,7 +57,7 @@ fn encrypt_into_with_nonce(
 /// Symmetric decryption of a `nonce || tag || encrypted` payload.
 ///
 /// Returns `None` if the key or payload is malformed, or if authentication fails.
-pub fn sym_decrypt(
+pub(crate) fn sym_decrypt(
     algorithm: SymmetricAlgorithm,
     nonce_length: NonceLength,
     key: &[u8],

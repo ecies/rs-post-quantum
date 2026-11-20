@@ -1,5 +1,5 @@
 use ecies_post_quantum::config::AsymmetricAlgorithm;
-use ecies_post_quantum::utils::keypair_from_seed;
+use ecies_post_quantum::utils::{generate_seed, keypair_from_seed};
 
 #[test]
 fn secret_key_debug_leaves_out_the_bytes() {
@@ -24,4 +24,22 @@ fn secret_keys_are_equal_only_with_the_same_algorithm_and_bytes() {
     assert!(sk != other_seed);
     assert!(sk != other_algorithm);
     assert!(sk != other_z);
+}
+
+#[test]
+fn seed_debug_leaves_out_the_bytes() {
+    let seed = generate_seed().unwrap();
+    assert_eq!(format!("{seed:?}"), "Seed { .. }");
+}
+
+#[test]
+fn seeds_are_equal_only_with_the_same_bytes() {
+    let seed = generate_seed().unwrap();
+    let other = generate_seed().unwrap();
+
+    // seeds only come from `generate_seed`, so the one pair with the same bytes is a seed and itself
+    #[allow(clippy::eq_op)]
+    let same = seed == seed;
+    assert!(same);
+    assert!(seed != other);
 }

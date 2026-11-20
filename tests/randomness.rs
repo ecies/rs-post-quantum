@@ -1,6 +1,6 @@
 use ecies_post_quantum::config::AsymmetricAlgorithm;
 use ecies_post_quantum::encrypt;
-use ecies_post_quantum::utils::generate_keypair;
+use ecies_post_quantum::utils::{generate_keypair, generate_seed};
 
 #[test]
 fn encapsulates_with_fresh_randomness() {
@@ -27,4 +27,23 @@ fn draws_d_and_every_byte_of_z_at_random() {
         let varies = bytes.iter().any(|key| key[position] != bytes[0][position]);
         assert!(varies, "byte {position}");
     }
+}
+
+#[test]
+fn draws_every_byte_of_a_generated_seed_at_random() {
+    let seeds: Vec<[u8; 64]> = (0..64).map(|_| *generate_seed().unwrap().as_bytes()).collect();
+
+    // a random byte comes out the same 64 times with a chance of 256^-63
+    for position in 0..64 {
+        let varies = seeds.iter().any(|seed| seed[position] != seeds[0][position]);
+        assert!(varies, "byte {position}");
+    }
+}
+
+#[test]
+fn draws_d_and_z_of_a_generated_seed_apart() {
+    let seed = generate_seed().unwrap();
+
+    // two halves drawn apart come out the same with a chance of 256^-32
+    assert_ne!(seed.as_bytes()[..32], seed.as_bytes()[32..]);
 }

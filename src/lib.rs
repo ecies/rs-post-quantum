@@ -9,20 +9,19 @@ extern crate alloc;
 pub mod config;
 /// Constant values
 pub mod consts;
-/// Symmetric encryption/decryption
-pub mod symmetric;
 /// Key generation
 pub mod utils;
 
 mod error;
 mod kem;
 mod keys;
+mod symmetric;
 
 use alloc::vec::Vec;
 
 use config::Config;
 pub use error::Error;
-pub use keys::{PublicKey, SecretKey};
+pub use keys::{PublicKey, SecretKey, Seed};
 
 /// Encrypts `msg` to an ML-KEM-768 public key with the default [`Config`].
 ///
@@ -58,12 +57,6 @@ pub fn decrypt_with_config(receiver_sk: &[u8], msg: &[u8], config: &Config) -> R
     if msg.len() < ciphertext_length {
         return Err(Error::InvalidMessage);
     }
-
-    // a 64 bytes secret key is a seed, which expands to the full key
-    let from_seed = <&[u8; kem::SEED_LENGTH]>::try_from(receiver_sk)
-        .ok()
-        .map(|seed| keys::keypair_from_seed(config.asymmetric_algorithm, seed).0);
-    let receiver_sk = from_seed.as_ref().map_or(receiver_sk, SecretKey::as_bytes);
 
     let (ciphertext, encrypted) = msg.split_at(ciphertext_length);
     let shared_secret = kem::decapsulate(config.asymmetric_algorithm, receiver_sk, ciphertext)?;

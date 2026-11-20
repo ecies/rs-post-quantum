@@ -39,7 +39,7 @@ pub(crate) fn encapsulate(algorithm: AsymmetricAlgorithm, public_key: &[u8]) -> 
     }
 }
 
-/// Checks the expanded secret key, then returns the shared secret
+/// Returns the shared secret, given the 64 bytes seed or the expanded secret key, which is checked first
 pub(crate) fn decapsulate(
     algorithm: AsymmetricAlgorithm,
     secret_key: &[u8],
@@ -82,6 +82,15 @@ macro_rules! parameter_set {
             pub(super) fn decapsulate(secret_key: &[u8], ciphertext: &[u8]) -> Result<SharedSecret, Error> {
                 // before the key is copied, so the copy is wiped on every path after it
                 let ciphertext = $Ciphertext::try_from(ciphertext).map_err(|_| Error::InvalidMessage)?;
+
+                if let Ok(seed) = <&[u8; SEED_LENGTH]>::try_from(secret_key) {
+                    // a key derived from the seed passes the hash check by construction
+                    let (mut secret_key, _) = $kem::generate_key_pair(*seed).into_parts();
+                    let shared_secret = Zeroizing::new($kem::decapsulate(&secret_key, &ciphertext));
+                    secret_key[0..].zeroize();
+                    return Ok(shared_secret);
+                }
+
                 let mut secret_key = $PrivateKey::try_from(secret_key).map_err(|_| Error::InvalidSecretKey)?;
 
                 // the hash check of FIPS 203, 7.3
@@ -115,3 +124,42 @@ parameter_set!(
     MlKem1024PrivateKey,
     MlKem1024Ciphertext
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What `@noble/post-quantum` 0.4.1's `decapsulate` returns for an all-zero ciphertext and the seed 0 to 63. The
+    /// ciphertext fails re-encryption, so each value is the implicit rejection `J(z || c)` of FIPS 203, which equals
+    /// SHAKE256 of the seed's last 32 bytes and the ciphertext, and changes with z.
+    const NOBLE_REJECTIONS: [(AsymmetricAlgorithm, &str); 3] = [
+        (
+            AsymmetricAlgorithm::MlKem512,
+            "fc3ccf20a37dd91d9f511da5e6cb92039b1414db5b0880741178ccfb143212ff",
+        ),
+        (
+            AsymmetricAlgorithm::MlKem768,
+            "c8fbeddafdacef2ffeb8b354ea644f11b5c150f3e2c4a74ce38abba8f854ae16",
+        ),
+        (
+            AsymmetricAlgorithm::MlKem1024,
+            "294cb5b6b0f37a047745a2a69991f66ac85936e1b077e717eaeb26bb0ba42c68",
+        ),
+    ];
+
+    #[test]
+    fn implicit_rejection_uses_the_z_of_the_secret_key() {
+        // through `decrypt`, z shows only in a payload whose AEAD part was made with J(z || c) as the key
+        let seed: [u8; SEED_LENGTH] = core::array::from_fn(|i| i as u8);
+
+        for (algorithm, expected) in NOBLE_REJECTIONS {
+            let ciphertext = alloc::vec![0u8; ciphertext_length(algorithm)];
+            let (expanded, _) = keypair_from_seed(algorithm, &seed);
+
+            let by_seed = decapsulate(algorithm, &seed, &ciphertext).unwrap();
+            let by_expanded = decapsulate(algorithm, &expanded, &ciphertext).unwrap();
+            assert_eq!(hex::encode(by_seed.as_ref()), expected, "{algorithm:?} seed");
+            assert_eq!(hex::encode(by_expanded.as_ref()), expected, "{algorithm:?} expanded");
+        }
+    }
+}
