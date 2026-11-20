@@ -20,9 +20,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # runs the wasm tests
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+        if: matrix.os == 'ubuntu-latest'
+
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
+          targets: wasm32-unknown-unknown, wasm32-wasip2
           components: rustfmt, clippy
 
       - run: cargo generate-lockfile
@@ -59,6 +66,11 @@ jobs:
         run: cargo clippy --all-targets --features aes-openssl -- -D warnings
         if: matrix.toolchain == 'stable'
 
+      # the same on every OS
+      - name: Lint (wasm)
+        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
+        if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
+
       - name: Check doc
         run: cargo doc --no-deps --features aes-openssl
         env:
@@ -74,6 +86,21 @@ jobs:
       - name: Test (OpenSSL AES, release)
         run: cargo test --release --features aes-openssl
         if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'
+
+      # wasm-bindgen-test-runner must match the locked wasm-bindgen exactly
+      - name: Get wasm-bindgen version
+        run: echo "WASM_BINDGEN_VERSION=$(cargo pkgid wasm-bindgen | cut -d@ -f2)" >> "$GITHUB_ENV"
+        if: matrix.os == 'ubuntu-latest'
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ env.WASM_BINDGEN_VERSION }}
+        if: matrix.os == 'ubuntu-latest'
+
+      # the same on every OS, so only on Ubuntu, on every toolchain
+      - name: Test (wasm)
+        run: sh ./scripts/test-wasm.sh
+        if: matrix.os == 'ubuntu-latest'
 
       - uses: taiki-e/install-action@cargo-llvm-cov
         if: matrix.os == 'ubuntu-latest' && matrix.toolchain == 'stable'

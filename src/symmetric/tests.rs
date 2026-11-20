@@ -3,6 +3,9 @@ use alloc::vec::Vec;
 use super::{encrypt_into_with_nonce, sym_decrypt, sym_encrypt_into};
 use crate::config::{NonceLength, SymmetricAlgorithm};
 use crate::error::Error;
+// wasm-bindgen-test runs only its own test attribute
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 /// Symmetric encryption into a new buffer, which holds only `nonce || tag || encrypted`
 fn sym_encrypt(algorithm: SymmetricAlgorithm, nonce_length: NonceLength, key: &[u8], plain: &[u8]) -> Option<Vec<u8>> {
