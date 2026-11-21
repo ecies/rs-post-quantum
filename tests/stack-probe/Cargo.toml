@@ -1,0 +1,23 @@
+[package]
+name = "stack-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ecies-post-quantum = { path = "../..", default-features = false }
+getrandom = { version = "0.4.3", default-features = false }
+libcrux-ml-kem = { version = "=0.0.12", default-features = false, features = ["mlkem512", "mlkem768", "mlkem1024"] }
+
+[features]
+default = []
+aes-openssl = ["ecies-post-quantum/aes-openssl"]
+
+[profile.release-s]
+inherits = "release"
+opt-level = "s"
+
+[profile.release-lto]
+inherits = "release"
+lto = true
+codegen-units = 1

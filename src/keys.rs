@@ -106,8 +106,10 @@ impl Eq for Seed {}
 
 /// Generates a key pair from the system random number generator.
 pub fn generate_keypair(algorithm: AsymmetricAlgorithm) -> Result<(SecretKey, PublicKey), Error> {
-    let seed = generate_seed()?;
-    Ok(keypair_from_seed(algorithm, seed.as_bytes()))
+    crate::stack::with_stack_wipe(|| {
+        let seed = generate_seed()?;
+        Ok(keypair_from_seed_inner(algorithm, seed.as_bytes()))
+    })
 }
 
 /// Generates a 64-byte [`Seed`] from the system random number generator.
@@ -140,6 +142,10 @@ pub fn generate_seed() -> Result<Seed, Error> {
 ///
 /// [`decrypt`](crate::decrypt) also accepts the seed directly as the secret key.
 pub fn keypair_from_seed(algorithm: AsymmetricAlgorithm, seed: &[u8; SEED_LENGTH]) -> (SecretKey, PublicKey) {
+    crate::stack::with_stack_wipe(|| keypair_from_seed_inner(algorithm, seed))
+}
+
+fn keypair_from_seed_inner(algorithm: AsymmetricAlgorithm, seed: &[u8; SEED_LENGTH]) -> (SecretKey, PublicKey) {
     let (secret_key, public_key) = kem::keypair_from_seed(algorithm, seed);
     (
         SecretKey {

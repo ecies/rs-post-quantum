@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Wipe 80 KiB of stack via `zeroize::zeroize_stack` after key derivation (`utils::generate_keypair`, `utils::keypair_from_seed`), encryption (`encrypt`, `encrypt_with_config`), and decryption (`decrypt`, `decrypt_with_config`, including error paths after decapsulation), clearing secret material left in `libcrux`, symmetric cipher, and crate stack frames in optimized builds
+- Document the ~84 KiB stack-space requirement (especially for `no_std` targets without guard pages) and what stays out of reach of stack wiping (CPU/vector registers, WASM locals, caller copies)
+- Add an unpublished `tests/stack-probe` crate and run it in CI on `x86_64` (AVX2) and `aarch64` (NEON) across release, OpenSSL AES, `opt-level = "s"`, LTO, and portable `libcrux` builds
+
 ## 0.1.0
 
 First release, compatible with `@ecies/post-quantum` 0.0.1 and 0.0.2.

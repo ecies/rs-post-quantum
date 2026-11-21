@@ -192,3 +192,59 @@ jobs:
           node tests/js/payloads.mjs encrypt | tee tests/js_payloads.txt
           cargo test --test js_payloads
           cargo test --test js_payloads --features aes-openssl
+
+  # verifies that key derivation, encryption and decryption leave no secrets or unwiped frames on the stack
+  stack-probe:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      # libcrux picks its AVX2 code at runtime, and would quietly fall back to its portable code without it
+      - name: Check for AVX2
+        run: grep -qw avx2 /proc/cpuinfo
+        if: matrix.os == 'ubuntu-latest'
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - run: cargo generate-lockfile
+        working-directory: tests/stack-probe
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tests/stack-probe
+
+      - name: Format
+        run: cargo fmt --check
+        working-directory: tests/stack-probe
+
+      - name: Lint
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo clippy --all-targets --features aes-openssl -- -D warnings
+        working-directory: tests/stack-probe
+
+      - name: Probe (release, pure Rust)
+        run: cargo run --release
+        working-directory: tests/stack-probe
+
+      - name: Probe (release, OpenSSL AES)
+        run: cargo run --release --features aes-openssl
+        working-directory: tests/stack-probe
+
+      - name: Probe (opt-level = "s")
+        run: cargo run --profile release-s
+        working-directory: tests/stack-probe
+
+      - name: Probe (LTO)
+        run: cargo run --profile release-lto
+        working-directory: tests/stack-probe
+
+      - name: Probe (portable libcrux)
+        run: LIBCRUX_DISABLE_SIMD128=1 LIBCRUX_DISABLE_SIMD256=1 cargo run --release --target-dir target/portable
+        working-directory: tests/stack-probe
