@@ -6,6 +6,7 @@
 - Document the stack the calls need (about 84 KiB in optimized builds, up to about 500 KiB in debug builds), which matters most on `no_std` targets without guard pages, and what stays out of reach of stack wiping (CPU/vector registers, WASM locals, caller copies)
 - Add an unpublished `tests/stack-probe` crate and run it in CI on `x86_64` (AVX2) and `aarch64` (NEON) across release, OpenSSL AES, `opt-level = "s"`, LTO, and portable `libcrux` builds, and print how deep each call goes in a debug build
 - Publish releases to crates.io through Trusted Publishing instead of a stored API token
+- Check the public API against the latest release with `cargo semver-checks` in CI
 
 ## 0.1.0
 

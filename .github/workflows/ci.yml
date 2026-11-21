@@ -145,6 +145,27 @@ jobs:
       - run: cargo build --features aes-openssl
         if: matrix.os != 'windows-latest'
 
+  # fails on a public API change that the version in Cargo.toml doesn't allow, against the latest release on crates.io.
+  # under 0.y.z a breaking change needs 0.(y+1).0, and an unchanged version counts as the next 0.y.(z+1)
+  semver-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # rustdoc's JSON format changes between Rust versions; install-action brings the latest
+      # cargo-semver-checks, which supports the current stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@cargo-semver-checks
+
+      - run: cargo generate-lockfile
+      - uses: Swatinem/rust-cache@v2
+
+      # enables every feature not named like `unstable` or `nightly`, so aes-openssl too
+      - run: cargo semver-checks
+
   # payloads between this crate and @ecies/post-quantum in both directions, through libcrux's AVX2 and NEON code
   interop:
     runs-on: ${{ matrix.os }}
