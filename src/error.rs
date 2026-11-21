@@ -1,17 +1,17 @@
 use core::fmt;
 
-/// Why encryption, decryption or key generation failed
+/// Reasons encryption, decryption, or key generation can fail.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum Error {
-    /// The public key has the wrong length for the ML-KEM parameter set, or fails its modulus check
+    /// The public key has the wrong length for the ML-KEM parameter set, or failed the FIPS 203 modulus check.
     InvalidPublicKey,
-    /// The secret key is neither a 64 bytes seed nor an expanded key of the right length, or fails its hash check
+    /// The secret key is neither a 64-byte seed nor a valid-length expanded key, or failed the FIPS 203 hash check.
     InvalidSecretKey,
-    /// The payload is too short, was not encrypted to this key and config, or was tampered with.
-    /// When encrypting, the message is too long for the symmetric cipher.
+    /// During decryption: the payload is too short, tampered with, or encrypted for a different key or config.
+    /// During encryption: the message exceeds the symmetric cipher's length limit.
     InvalidMessage,
-    /// The system random number generator failed
+    /// The system random number generator failed.
     RngFailure,
 }
 

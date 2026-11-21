@@ -9,21 +9,21 @@ use crate::config::AsymmetricAlgorithm;
 use crate::error::Error;
 use crate::kem::{self, SEED_LENGTH};
 
-/// An ML-KEM secret key, as the expanded FIPS 203 decapsulation key that `@ecies/post-quantum` uses.
+/// An ML-KEM secret key in expanded FIPS 203 decapsulation-key format (matching `@ecies/post-quantum`).
 ///
-/// Its bytes are zeroized on drop, compared in constant time, and left out of `Debug`.
+/// Its bytes are zeroized on drop, compared in constant time, and redacted from `Debug`.
 pub struct SecretKey {
     algorithm: AsymmetricAlgorithm,
     bytes: Vec<u8>,
 }
 
 impl SecretKey {
-    /// The ML-KEM parameter set
+    /// Returns the ML-KEM parameter set of this key.
     pub fn algorithm(&self) -> AsymmetricAlgorithm {
         self.algorithm
     }
 
-    /// The expanded key bytes
+    /// Returns the expanded secret key bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
@@ -52,7 +52,7 @@ impl PartialEq for SecretKey {
 
 impl Eq for SecretKey {}
 
-/// An ML-KEM public key, as the FIPS 203 encapsulation key
+/// An ML-KEM public key in FIPS 203 encapsulation-key format.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PublicKey {
     algorithm: AsymmetricAlgorithm,
@@ -60,25 +60,25 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    /// The ML-KEM parameter set
+    /// Returns the ML-KEM parameter set of this key.
     pub fn algorithm(&self) -> AsymmetricAlgorithm {
         self.algorithm
     }
 
-    /// The key bytes
+    /// Returns the public key bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 }
 
-/// A 64 bytes ML-KEM seed (`d || z` in FIPS 203): the compact form of a secret key, for any parameter set.
+/// A 64-byte ML-KEM seed (`d || z` in FIPS 203): the compact representation of a secret key for any parameter set.
 ///
-/// Its bytes are kept on the heap, so moving a `Seed` doesn't copy them. They are zeroized on drop, compared in
-/// constant time, and left out of `Debug`.
+/// Its bytes are heap-allocated so moving a `Seed` does not copy them. They are zeroized on drop, compared in
+/// constant time, and redacted from `Debug`.
 pub struct Seed(Box<[u8; SEED_LENGTH]>);
 
 impl Seed {
-    /// The seed bytes, which [`keypair_from_seed`] and [`decrypt`](crate::decrypt) take
+    /// Returns the 64-byte seed, which can be passed to [`keypair_from_seed`] or [`decrypt`](crate::decrypt).
     pub fn as_bytes(&self) -> &[u8; SEED_LENGTH] {
         &self.0
     }
@@ -104,18 +104,18 @@ impl PartialEq for Seed {
 
 impl Eq for Seed {}
 
-/// Generates a key pair from the system random number generator
+/// Generates a key pair from the system random number generator.
 pub fn generate_keypair(algorithm: AsymmetricAlgorithm) -> Result<(SecretKey, PublicKey), Error> {
     let seed = generate_seed()?;
     Ok(keypair_from_seed(algorithm, seed.as_bytes()))
 }
 
-/// Draws a [`Seed`] from the system random number generator.
+/// Generates a 64-byte [`Seed`] from the system random number generator.
 ///
-/// The seed is the compact form of a secret key: store it instead of the expanded key, derive the public key with
-/// [`keypair_from_seed`], and pass its bytes to [`decrypt`](crate::decrypt) as the secret key. It doesn't record the
-/// parameter set, so derive the keys and decrypt with the same one. The `Seed` is wiped on drop, but copies of its
-/// bytes, such as the stored one, are up to the caller.
+/// Store the seed instead of the much larger expanded key, derive the public key with [`keypair_from_seed`], and pass
+/// the seed bytes (or the expanded key) to [`decrypt`](crate::decrypt). A seed does not record its parameter set, so
+/// derive keys and decrypt with the same [`AsymmetricAlgorithm`]. `Seed` is zeroized on drop, but any copies you store
+/// are your responsibility to protect.
 ///
 /// ```
 /// use ecies_post_quantum::config::AsymmetricAlgorithm;
@@ -135,9 +135,10 @@ pub fn generate_seed() -> Result<Seed, Error> {
     Ok(seed)
 }
 
-/// Derives a key pair from a 64 bytes seed (`d || z` in FIPS 203), the same as `keygen(seed)` in `@noble/post-quantum`.
+/// Deterministically derives a key pair from a 64-byte seed (`d || z` in FIPS 203), matching `keygen(seed)` in
+/// `@noble/post-quantum`.
 ///
-/// The seed is a compact form of the secret key: [`decrypt`](crate::decrypt) accepts it too.
+/// [`decrypt`](crate::decrypt) also accepts the seed directly as the secret key.
 pub fn keypair_from_seed(algorithm: AsymmetricAlgorithm, seed: &[u8; SEED_LENGTH]) -> (SecretKey, PublicKey) {
     let (secret_key, public_key) = kem::keypair_from_seed(algorithm, seed);
     (

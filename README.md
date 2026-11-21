@@ -3,12 +3,15 @@
 [![License](https://img.shields.io/github/license/ecies/rs-post-quantum.svg)](https://github.com/ecies/rs-post-quantum/blob/main/LICENSE)
 [![Crates](https://img.shields.io/crates/v/ecies-post-quantum)](https://crates.io/crates/ecies-post-quantum)
 [![Doc](https://docs.rs/ecies-post-quantum/badge.svg)](https://docs.rs/ecies-post-quantum/latest/ecies_post_quantum/)
+[![Recent Downloads](https://img.shields.io/crates/dr/ecies-post-quantum)](https://lib.rs/crates/ecies-post-quantum)
 [![CI](https://img.shields.io/github/actions/workflow/status/ecies/rs-post-quantum/ci.yml)](https://github.com/ecies/rs-post-quantum/actions)
 [![Codecov](https://img.shields.io/codecov/c/github/ecies/rs-post-quantum.svg)](https://codecov.io/gh/ecies/rs-post-quantum)
 
-Post-quantum Cryptography Integrated Encryption Scheme in Rust, replacing "ec" in [`eciesrs`](https://github.com/ecies/rs) with ML-KEM (Module-Lattice-Based Key-Encapsulation Mechanism, FIPS 203).
+Post-quantum public-key encryption in Rust — the **ML-KEM (FIPS 203)** counterpart to [`eciesrs`](https://github.com/ecies/rs). It replaces elliptic-curve key agreement with Module-Lattice-Based Key Encapsulation and pairs it with authenticated symmetric encryption (**AES-256-GCM** or **XChaCha20-Poly1305**).
 
-This is the Rust version of [`@ecies/post-quantum`](https://github.com/ecies/js-post-quantum), and the two are compatible: a payload encrypted by one can be decrypted by the other.
+- **Wire-compatible with JavaScript/TypeScript:** payloads encrypted by this crate can be decrypted by [`@ecies/post-quantum`](https://github.com/ecies/js-post-quantum), and vice versa.
+- **`no_std` + `alloc` & WASM ready:** runs on native targets, `wasm32-unknown-unknown`, `wasm32-wasip2`, and embedded targets.
+- **Pure Rust by default:** `#![forbid(unsafe_code)]`, with an optional OpenSSL AES backend for faster bulk encryption.
 
 ## Install
 
@@ -16,9 +19,11 @@ This is the Rust version of [`@ecies/post-quantum`](https://github.com/ecies/js-
 cargo add ecies-post-quantum
 ```
 
-It needs Rust 1.94 or later.
+Requires **Rust 1.94** or later.
 
 ## Quick start
+
+By default, `encrypt` and `decrypt` use **ML-KEM-768** and **AES-256-GCM** with a 16-byte nonce:
 
 ```rust
 use ecies_post_quantum::config::AsymmetricAlgorithm;
@@ -32,24 +37,9 @@ let encrypted = encrypt(pk.as_bytes(), msg).unwrap();
 assert_eq!(decrypt(sk.as_bytes(), &encrypted).unwrap(), msg);
 ```
 
-## API
-
-- `encrypt(receiver_pk: &[u8], msg: &[u8]) -> Result<Vec<u8>, Error>` encrypts to an ML-KEM-768 public key with the default config.
-- `decrypt(receiver_sk: &[u8], msg: &[u8]) -> Result<Vec<u8>, Error>` decrypts it with the secret key, either the expanded key or its 64-byte seed.
-- `encrypt_with_config` and `decrypt_with_config` take a `&Config` as their last argument. Both sides must use the same config: the payload doesn't record it.
-- `utils::generate_keypair(AsymmetricAlgorithm) -> Result<(SecretKey, PublicKey), Error>` draws a key pair from the system random number generator.
-- `utils::generate_seed() -> Result<Seed, Error>` draws a 64-byte seed from it instead: the compact form of a secret key, for any parameter set (see [Storing the secret key](#storing-the-secret-key)).
-- `utils::keypair_from_seed(AsymmetricAlgorithm, &[u8; 64]) -> (SecretKey, PublicKey)` derives the key pair of a seed, the same as `keygen(seed)` in [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum).
-- `SecretKey` and `PublicKey` give their bytes with `as_bytes()` and their parameter set with `algorithm()`, and `Seed` gives its bytes with `as_bytes()`. `SecretKey` and `Seed` are wiped on drop, compared in constant time, left out of `Debug`, and can't be cloned.
-
-`Error` tells why a call failed:
-
-- `InvalidPublicKey`: the public key has the wrong length for the parameter set, or fails its modulus check.
-- `InvalidSecretKey`: the secret key is neither a 64-byte seed nor an expanded key of the right length, or is an expanded key that fails its hash check.
-- `InvalidMessage`: the payload is too short, was not encrypted to this key and config, or was tampered with. When encrypting, the message is too long for the symmetric cipher.
-- `RngFailure`: the system random number generator failed.
-
 ## Configuration
+
+Use `encrypt_with_config` and `decrypt_with_config` to select a different ML-KEM parameter set, symmetric cipher, or AES-GCM nonce length:
 
 ```rust
 use ecies_post_quantum::config::{AsymmetricAlgorithm, Config, SymmetricAlgorithm};
@@ -67,123 +57,184 @@ let encrypted = encrypt_with_config(pk.as_bytes(), b"hello", &config).unwrap();
 assert_eq!(decrypt_with_config(sk.as_bytes(), &encrypted, &config).unwrap(), b"hello");
 ```
 
-The fields and defaults are the same as JS's `Config`:
+> **Note:** Both sides must agree on the `Config` out of band — payloads do not carry algorithm metadata.
 
-| Field | Rust | JS | Default |
+`Config` mirrors `@ecies/post-quantum`'s `Config` options and defaults:
+
+| Field | Rust values | JS values | Default |
 | --- | --- | --- | --- |
-| `asymmetric_algorithm` | `MlKem512`, `MlKem768`, `MlKem1024` | `"ml-kem-512"`, `"ml-kem-768"`, `"ml-kem-1024"` | ML-KEM-768 |
-| `symmetric_algorithm` | `Aes256Gcm`, `XChaCha20` | `"aes-256-gcm"`, `"xchacha20"` | AES-256-GCM |
-| `symmetric_nonce_length` | `Twelve`, `Sixteen` | `12`, `16` | 16, for AES-256-GCM only |
+| `asymmetric_algorithm` | `MlKem512`, `MlKem768`, `MlKem1024` | `"ml-kem-512"`, `"ml-kem-768"`, `"ml-kem-1024"` | `MlKem768` |
+| `symmetric_algorithm` | `Aes256Gcm`, `XChaCha20` | `"aes-256-gcm"`, `"xchacha20"` | `Aes256Gcm` |
+| `symmetric_nonce_length` | `NonceLength::Twelve`, `NonceLength::Sixteen` | `12`, `16` | `Sixteen` (AES-256-GCM only) |
 
-### Which configuration should I choose?
+`symmetric_nonce_length` is ignored when `symmetric_algorithm` is `XChaCha20`, which always uses a 24-byte nonce.
 
-ML-KEM-768 is the parameter set that NIST recommends as the default (FIPS 203, section 8). Choose ML-KEM-1024 for a higher security category, at the cost of larger keys and payloads.
+### Choosing a configuration
 
-AES-256-GCM is fast on CPUs with AES instructions. Without them, XChaCha20-Poly1305 is faster.
+- **ML-KEM parameter set:** `MlKem768` is the NIST-recommended default (FIPS 203, Section 8). Use `MlKem1024` if you want a higher security category and can accept larger keys and ciphertexts, or `MlKem512` if smaller payloads matter more.
+- **Symmetric cipher:** `Aes256Gcm` is fastest on CPUs with hardware AES instructions. Choose `XChaCha20` on targets without hardware AES acceleration.
 
-### OpenSSL AES backend
+### Optional OpenSSL AES backend
 
-AES-256-GCM is pure Rust by default. The `aes-openssl` feature runs it on OpenSSL instead, which is faster on large messages. XChaCha20-Poly1305 stays pure Rust. The feature links the system's OpenSSL; on Windows, CI installs it with vcpkg.
+AES-256-GCM runs in pure Rust by default. Enable the `aes-openssl` feature to use OpenSSL instead, which significantly speeds up large messages (XChaCha20-Poly1305 always stays pure Rust):
 
 ```toml
 ecies-post-quantum = { version = "0.1", features = ["aes-openssl"] }
 ```
 
-## Key and payload formats
+This links against the system OpenSSL library (on Windows, CI installs it via vcpkg).
 
-| Bytes | ML-KEM-512 | ML-KEM-768 | ML-KEM-1024 |
-| --- | --- | --- | --- |
-| Public key | 800 | 1184 | 1568 |
-| Secret key, expanded | 1632 | 2400 | 3168 |
-| Secret key, seed | 64 | 64 | 64 |
-| ML-KEM ciphertext | 768 | 1088 | 1568 |
+## Storing the secret key
 
-The keys are the FIPS 203 encapsulation key and expanded decapsulation key, with the same bytes as `@noble/post-quantum`'s `publicKey` and `secretKey`. The seed is `d || z` from FIPS 203. `decrypt` accepts either form of the secret key and tells them apart by length, while JS's `decrypt` takes only the expanded key.
-
-A payload is:
-
-```text
-ML-KEM ciphertext || nonce (16, 12 or 24 bytes) || tag (16 bytes) || encrypted message
-```
-
-The nonce is 16 or 12 bytes for AES-256-GCM, and 24 bytes for XChaCha20-Poly1305. The encrypted message is as long as the message.
-
-### Storing the secret key
-
-Store the 64-byte seed rather than the expanded key: it is smaller, and `decrypt` takes it as it is. It doesn't record the parameter set, so derive the keys and decrypt with the same one. Decrypting from the seed derives the expanded key again on every call, so it is slower than decrypting from the expanded key, and in release builds it leaves more copies of the key on the stack (see [Secret material](#secret-material)).
+Expanded ML-KEM secret keys are large (1,632 to 3,168 bytes). For persistence, store the **64-byte `Seed`** instead:
 
 ```rust
 use ecies_post_quantum::config::AsymmetricAlgorithm;
 use ecies_post_quantum::utils::{generate_seed, keypair_from_seed};
 use ecies_post_quantum::{decrypt, encrypt};
 
-let seed = generate_seed().unwrap(); // store seed.as_bytes(), and keep it as secret as the key
+// Store seed.as_bytes() and protect it like any secret key.
+let seed = generate_seed().unwrap();
 let (_, pk) = keypair_from_seed(AsymmetricAlgorithm::MlKem768, seed.as_bytes());
 
 let encrypted = encrypt(pk.as_bytes(), b"hello").unwrap();
+// `decrypt` accepts either a 64-byte seed or an expanded secret key.
 assert_eq!(decrypt(seed.as_bytes(), &encrypted).unwrap(), b"hello");
 ```
 
-In JS, `keygen(seed)` of `@noble/post-quantum` derives the same keys from the seed.
+Keep these details in mind when working with seeds:
+
+- **Track the parameter set:** a seed does not record which ML-KEM parameter set it belongs to, so derive keys and decrypt with the same `AsymmetricAlgorithm`.
+- **Performance & stack copies:** passing a seed directly to `decrypt` re-expands the secret key on every call. If you decrypt many messages in memory, expand it once with `keypair_from_seed` and reuse the `SecretKey` — this is faster and leaves fewer copies of key material on the stack (see [Secret material](#secret-material)).
+- **JavaScript interop:** `keypair_from_seed` matches `keygen(seed)` in [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum). Unlike Rust's `decrypt`, `@ecies/post-quantum`'s `decrypt` only accepts the expanded secret key, so expand the seed in JS first.
+
+## API overview
+
+### Encrypt and decrypt
+
+- `encrypt(receiver_pk: &[u8], msg: &[u8]) -> Result<Vec<u8>, Error>` — encrypts `msg` using the default config (ML-KEM-768 + AES-256-GCM-16).
+- `decrypt(receiver_sk: &[u8], msg: &[u8]) -> Result<Vec<u8>, Error>` — decrypts a payload from `encrypt` using either an expanded secret key or its 64-byte seed.
+- `encrypt_with_config(receiver_pk: &[u8], msg: &[u8], config: &Config) -> Result<Vec<u8>, Error>` — encrypts with an explicit `Config`.
+- `decrypt_with_config(receiver_sk: &[u8], msg: &[u8], config: &Config) -> Result<Vec<u8>, Error>` — decrypts with the matching `Config`, using either an expanded secret key or its 64-byte seed.
+
+### Key generation and key types
+
+- `utils::generate_keypair(algorithm: AsymmetricAlgorithm) -> Result<(SecretKey, PublicKey), Error>` — generates a key pair from the system RNG.
+- `utils::generate_seed() -> Result<Seed, Error>` — generates a 64-byte seed from the system RNG.
+- `utils::keypair_from_seed(algorithm: AsymmetricAlgorithm, seed: &[u8; 64]) -> (SecretKey, PublicKey)` — deterministically derives a key pair from a 64-byte seed.
+- `PublicKey` and `SecretKey` expose `as_bytes()` and `algorithm()`; `Seed` exposes `as_bytes()`.
+- `SecretKey` and `Seed` are zeroized on drop, compared in constant time, redacted in `Debug`, and do not implement `Clone`.
+
+### Errors (`Error`)
+
+| Variant | Cause |
+| --- | --- |
+| `InvalidPublicKey` | Wrong length for the parameter set, or failed the FIPS 203 modulus check. |
+| `InvalidSecretKey` | Neither a 64-byte seed nor a valid-length expanded key, or failed the FIPS 203 hash check. |
+| `InvalidMessage` | During decryption: payload is too short, tampered with, or encrypted for a different key or config. During encryption: message exceeds the symmetric cipher's length limit. |
+| `RngFailure` | The system random number generator failed. |
+
+## Key and payload formats
+
+Keys follow FIPS 203 directly (encapsulation key and expanded decapsulation key) and use the exact same byte encoding as `@noble/post-quantum`'s `publicKey` and `secretKey`. A seed is the 64-byte concatenation `d || z` from FIPS 203.
+
+| Component (bytes) | ML-KEM-512 | ML-KEM-768 | ML-KEM-1024 |
+| --- | --- | --- | --- |
+| Public key | 800 | 1,184 | 1,568 |
+| Secret key (expanded) | 1,632 | 2,400 | 3,168 |
+| Secret key (seed) | 64 | 64 | 64 |
+| ML-KEM ciphertext | 768 | 1,088 | 1,568 |
+
+Each encrypted payload has the layout:
+
+```text
+ML-KEM ciphertext || nonce (16, 12, or 24 B) || tag (16 B) || encrypted message
+```
+
+- **Nonce:** 16 or 12 bytes for AES-256-GCM, 24 bytes for XChaCha20-Poly1305.
+- **Tag:** 16-byte AEAD authentication tag.
+- **Encrypted message:** same length as the plaintext.
 
 ## Cross-language compatibility
 
-CI checks both directions against `@ecies/post-quantum` from npm, for every parameter set and cipher, on x86_64 (AVX2) and aarch64 (NEON): JS decrypts the payloads that Rust encrypts, and Rust decrypts payloads that JS encrypts, both committed ones and fresh ones on every run.
+CI verifies interoperability in both directions against `@ecies/post-quantum` from npm across every ML-KEM parameter set and symmetric cipher, on both `x86_64` (AVX2) and `aarch64` (NEON):
+
+- JavaScript decrypts payloads encrypted by Rust (both pure Rust and OpenSSL AES builds).
+- Rust decrypts payloads encrypted by JavaScript, using both committed vectors and freshly generated payloads on every run.
 
 ## WASM and `no_std`
 
-The crate is `no_std` with `alloc`.
+This crate is `#![no_std]` with `alloc`.
 
-On `wasm32-unknown-unknown`, key generation and encryption take their randomness from [`getrandom`](https://docs.rs/getrandom), which has no default source there. In a browser or Node.js, enable its `wasm_js` feature in your own crate:
+Key generation and encryption rely on [`getrandom`](https://docs.rs/getrandom), which intentionally leaves the randomness backend up to the final application on targets without an OS:
 
-```toml
-[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
-getrandom = { version = "0.4", features = ["wasm_js"] }
-```
+- **Browsers and Node.js (`wasm32-unknown-unknown`):** enable `getrandom`'s `wasm_js` feature in your own `Cargo.toml`:
 
-For other runtimes, and for targets without an operating system such as `thumbv7em-none-eabihf`, pick one of getrandom's [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends), such as `custom`. Every build needs one, even if it only decrypts: with `unsupported`, decryption works, while key generation and encryption return `Error::RngFailure`.
+  ```toml
+  [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+  getrandom = { version = "0.4", features = ["wasm_js"] }
+  ```
 
-The test suite runs inside `wasm32-unknown-unknown` under Node.js, and builds for `wasm32-wasip2`.
+- **Embedded and custom runtimes (e.g., `thumbv7em-none-eabihf`):** select one of `getrandom`'s [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends), such as `custom`. A backend must be configured even for decrypt-only builds — with `unsupported`, decryption succeeds while key generation and encryption return `Error::RngFailure`.
+
+CI runs the test suite on `wasm32-unknown-unknown` under Node.js and checks compilation for `wasm32-wasip2`.
 
 ## Security
 
+> **Audit status:** This crate has not had an independent security audit, and its underlying ML-KEM implementation (`libcrux`) is currently pre-release (`0.0.x`).
+
 ### ML-KEM implementation
 
-ML-KEM comes from [`libcrux-ml-kem`](https://github.com/cryspen/libcrux) 0.0.12.
-- **What libcrux says is verified:** its portable and AVX2 code for field arithmetic, NTT and serialization, and its generic code for the high-level algorithms, with hax and F\*.
-- **What is not, yet:** its [verification status](https://github.com/cryspen/libcrux/blob/24330863b3d1d4179e4bcea8cef6bf6fa313057e/libcrux-ml-kem/proofs/verification_status.md) still lists unproven parts, such as the IND-CPA scheme and sampling. The SHA-3 code it hashes with, `libcrux-sha3`, is marked pre-verification.
-- **On aarch64,** it runs its NEON code, which is not verified. [RUSTSEC-2025-0133](https://osv.dev/vulnerability/RUSTSEC-2025-0133), since fixed, was in that code.
-- **Side channels:** libcrux checks its portable code for secret independence through its types, and inspects the generated assembly. It calls this best-effort, since the compiler gives no guarantee, and says compiled code is not verified to resist side channels.
-- **Maturity:** libcrux calls all its crates pre-release (versions below 0.1).
+ML-KEM is provided by [`libcrux-ml-kem`](https://github.com/cryspen/libcrux) `0.0.12`:
 
-This crate has not had an independent security audit.
+- **Verified parts:** `libcrux` formally verifies (with hax and F\*) its portable and AVX2 implementations of field arithmetic, NTT, and serialization, as well as its generic high-level ML-KEM algorithms.
+- **Unverified parts:** its [verification status](https://github.com/cryspen/libcrux/blob/24330863b3d1d4179e4bcea8cef6bf6fa313057e/libcrux-ml-kem/proofs/verification_status.md) still lists unproven components, including the IND-CPA scheme and sampling. Its SHA-3 dependency (`libcrux-sha3`) is marked pre-verification, and its `aarch64` NEON backend is not verified ([RUSTSEC-2025-0133](https://osv.dev/vulnerability/RUSTSEC-2025-0133), now fixed, was in the NEON code).
+- **Side channels:** `libcrux` checks secret independence in its portable code via types and inspects generated assembly, which it describes as best-effort — the compiler gives no constant-time guarantee, and compiled machine code is not formally verified against side channels.
 
-### Key checks
+### Key checks and implicit rejection
 
-Encryption runs the modulus check of FIPS 203 section 7.2 on the public key, and decryption runs the hash check of section 7.3 on an expanded secret key, before using them. A key derived from a seed passes that check by construction, so decryption from a seed skips it. A wrong key or a tampered ciphertext makes ML-KEM return a pseudorandom shared secret (implicit rejection), so the AEAD tag check fails and decryption returns `InvalidMessage`.
+- **Public keys:** `encrypt` runs the FIPS 203 Section 7.2 modulus check before encapsulating.
+- **Secret keys:** `decrypt` runs the FIPS 203 Section 7.3 hash check on expanded secret keys. When decrypting from a 64-byte seed, the derived key satisfies this check by construction, so it is skipped.
+- **Tampered or mismatched payloads:** a wrong key or modified ciphertext triggers ML-KEM implicit rejection (producing a pseudorandom shared secret), so AEAD verification fails and decryption returns `Error::InvalidMessage`.
 
-### No key derivation step
+### No separate KDF
 
-The 32-byte ML-KEM shared secret is the AEAD key, as in JS, with no HKDF. ML-KEM already derives it with SHA3, and every message gets a fresh one, so each AEAD key encrypts a single message. That also makes the 12-byte random AES-256-GCM nonce safe.
+The 32-byte ML-KEM shared secret is used directly as the AEAD key (without HKDF), matching `@ecies/post-quantum`. ML-KEM already derives this secret with SHA-3, and every encryption generates a fresh key — so each AEAD key encrypts at most one message, which also makes random 12-byte AES-256-GCM nonces safe.
 
 ### Secret material
 
-`SecretKey` and `Seed` are wiped on drop, and so are shared secrets and the randomness the crate draws for encryption. When decrypting with an expanded key, the copy handed to libcrux is wiped too. libcrux takes seeds and randomness by value and doesn't wipe its key types, and the stack frames of libcrux, the ciphers and this crate aren't wiped, so copies of secrets may stay on the stack, the shared secret among them. That includes parts of the secret key, such as z, after any decryption, and copies of the expanded key or of its secret part where the crate derives a key pair from a seed (`generate_keypair`, `keypair_from_seed` and `decrypt` with a seed). Debug builds leave more, sometimes including whole copies of the expanded key after decrypting with it: see [#4](https://github.com/ecies/rs-post-quantum/issues/4). Copies of a seed's bytes that you make, such as a stored one, are yours to protect.
+**What is zeroized:**
 
-### Dependencies
+- `SecretKey` and `Seed` are wiped on drop (`Seed` is heap-allocated so moving it does not copy its bytes).
+- Shared secrets, per-encryption randomness, and the expanded-key copy passed into `libcrux` during decryption are wiped after use.
 
-libcrux releases are 0.0.x, so `libcrux-ml-kem` is pinned exactly, and its fixes reach users through a release of this crate. `cargo audit` runs on pushes and pull requests to `main` and weekly, and fails on any advisory except RUSTSEC-2026-0173: proc-macro-error2 is unmaintained, and only libcrux's `cfg(hax)` builds reach it.
+**Known limitations:**
 
-## Benchmark
+- `libcrux` takes seeds and randomness by value and does not zeroize its internal key types, and stack frames (in `libcrux`, the symmetric ciphers, and this crate) are not wiped.
+- As a result, copies of secrets can remain on the stack — including shared secrets, parts of the secret key (such as `z`) after decryption, and expanded-key material whenever a key pair is derived from a seed (`generate_keypair`, `keypair_from_seed`, and `decrypt` with a seed).
+- Debug builds can leave more copies behind, sometimes including whole copies of the expanded key after decrypting with it (see [#4](https://github.com/ecies/rs-post-quantum/issues/4)).
+- Any copies of seed bytes that your application creates or persists are your responsibility to protect.
+
+### Dependencies and audits
+
+Because `libcrux` releases are `0.0.x`, `libcrux-ml-kem` is pinned to an exact version (`=0.0.12`), and upstream fixes are delivered through releases of this crate.
+
+`cargo audit` runs on pushes, pull requests to `main`, and weekly. It fails on any advisory except `RUSTSEC-2026-0173` (`proc-macro-error2` is unmaintained, and is only reached by `libcrux`'s `cfg(hax)` builds).
+
+## Benchmarks
+
+Run the Criterion benchmarks locally for both AES backends:
 
 ```sh
 cargo bench
 cargo bench --features aes-openssl
 ```
 
-The first command measures key generation at each ML-KEM level, plus encryption and decryption of 32 B, 100 MiB and 200 MiB messages at each level with the default AES-256-GCM. The second runs the same on the OpenSSL backend.
+The suite benchmarks key generation for each ML-KEM level, plus encryption and decryption of 32 B, 100 MiB, and 200 MiB messages using the default AES-256-GCM configuration.
 
-Criterion's estimates on an Apple M4 (24 GiB, macOS 26.7) with Rust 1.100.0 and Homebrew's OpenSSL 4.1, on 2026-11-20:
+Measured on an Apple M4 (24 GiB, macOS 26.7) with Rust 1.100.0 and Homebrew OpenSSL 4.1 (2026-11-20):
+
+**Small messages and key generation** (OpenSSL AES results are within 0.6 µs):
 
 | Pure Rust AES | ML-KEM-512 | ML-KEM-768 | ML-KEM-1024 |
 | --- | --- | --- | --- |
@@ -191,11 +242,9 @@ Criterion's estimates on an Apple M4 (24 GiB, macOS 26.7) with Rust 1.100.0 and 
 | Encrypt 32 B | 6.9 µs | 11.3 µs | 15.4 µs |
 | Decrypt 32 B | 6.6 µs | 11.5 µs | 16.2 µs |
 
-The OpenSSL build is within 0.6 µs of these.
+**Large messages** (ML-KEM-768; AES-256-GCM and memory copying dominate, so ML-KEM-512 and ML-KEM-1024 are within 4%):
 
-On large messages, AES-256-GCM and copying the message take nearly all the time, so the ML-KEM level barely matters. With ML-KEM-768 (the other levels are within 4%):
-
-| | Pure Rust AES | OpenSSL AES |
+| Operation | Pure Rust AES | OpenSSL AES |
 | --- | --- | --- |
 | Encrypt 100 MiB | 19.2 ms | 11.8 ms |
 | Decrypt 100 MiB | 19.3 ms | 11.9 ms |
