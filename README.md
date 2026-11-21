@@ -176,7 +176,7 @@ Key generation and encryption rely on [`getrandom`](https://docs.rs/getrandom), 
   ```
 
 - **Embedded and custom runtimes (e.g., `thumbv7em-none-eabihf`):** select one of `getrandom`'s [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends), such as `custom`. A backend must be configured even for decrypt-only builds — with `unsupported`, decryption succeeds while key generation and encryption return `Error::RngFailure`.
-- **Stack size:** key generation, encryption, and decryption each wipe **80 KiB** of stack via `zeroize::zeroize_stack` before returning. Callers — especially on `no_std` targets without stack guard pages, where a stack overflow silently corrupts adjacent memory — should ensure at least **84 KiB** of free stack space before calling into this crate in optimized builds. Unoptimized debug builds need far more: up to about 350 KiB for ML-KEM-1024 decryption.
+- **Stack size:** key generation, encryption, and decryption each wipe **80 KiB** of stack via `zeroize::zeroize_stack` before returning. Callers — especially on `no_std` targets without stack guard pages, where a stack overflow silently corrupts adjacent memory — should ensure at least **84 KiB** of free stack space before calling into this crate in optimized builds. Unoptimized debug builds need far more: up to about 500 KiB on x86_64 and 350 KiB on aarch64.
 
 CI runs the test suite on `wasm32-unknown-unknown` under Node.js and checks compilation for `wasm32-wasip2`.
 
