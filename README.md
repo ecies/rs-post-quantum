@@ -176,7 +176,7 @@ Key generation and encryption rely on [`getrandom`](https://docs.rs/getrandom), 
   ```
 
 - **Embedded and custom runtimes (e.g., `thumbv7em-none-eabihf`):** select one of `getrandom`'s [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends), such as `custom`. A backend must be configured even for decrypt-only builds — with `unsupported`, decryption succeeds while key generation and encryption return `Error::RngFailure`.
-- **Stack size:** key generation, encryption, and decryption each wipe **80 KiB** of stack via `zeroize::zeroize_stack` before returning. Callers — especially on `no_std` targets without stack guard pages, where a stack overflow silently corrupts adjacent memory — should ensure at least **84 KiB** of free stack space before calling into this crate.
+- **Stack size:** key generation, encryption, and decryption each wipe **80 KiB** of stack via `zeroize::zeroize_stack` before returning. Callers — especially on `no_std` targets without stack guard pages, where a stack overflow silently corrupts adjacent memory — should ensure at least **84 KiB** of free stack space before calling into this crate in optimized builds. Unoptimized debug builds need far more: up to about 350 KiB for ML-KEM-1024 decryption.
 
 CI runs the test suite on `wasm32-unknown-unknown` under Node.js and checks compilation for `wasm32-wasip2`.
 
@@ -212,8 +212,8 @@ The 32-byte ML-KEM shared secret is used directly as the AEAD key (without HKDF)
 
 **Known limitations (out of reach of stack wiping):**
 
-- **Best-effort guarantee:** `zeroize::zeroize_stack` relies on `#[inline(never)]` not being ignored by the compiler and on stack usage staying within 80 KiB. Unoptimized debug builds use much deeper frames and still leave copies below 80 KiB.
-- **CPU and vector registers:** registers can still hold key material after a call returns, and a later signal handler or context switch may save them to the stack.
+- **Best-effort guarantee:** `zeroize::zeroize_stack` relies on `#[inline(never)]` not being ignored by the compiler and on stack usage staying within 80 KiB. Unoptimized debug builds use much deeper frames, so copies of secrets, including whole expanded keys, remain deeper than the 80 KiB the wipe covers.
+- **CPU and vector registers:** registers can still hold key material after a call returns, and a later signal handler may save them to the stack.
 - **WASM locals:** on WebAssembly, the wipe only covers the linear-memory shadow stack; values the engine keeps in WASM locals live on its own stack and are out of reach.
 - **Caller copies:** any copies of keys, seeds, or plaintexts that your application creates or persists remain your responsibility to protect.
 
