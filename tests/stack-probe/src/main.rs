@@ -5,7 +5,9 @@ use std::process::ExitCode;
 use ecies_post_quantum::config::{AsymmetricAlgorithm, Config, NonceLength, SymmetricAlgorithm};
 use ecies_post_quantum::consts::{ML_KEM_512_PKE_SIZE, ML_KEM_768_PKE_SIZE, ML_KEM_1024_PKE_SIZE};
 use ecies_post_quantum::utils::{generate_keypair, generate_seed, keypair_from_seed};
-use ecies_post_quantum::{Error, decrypt_with_config, encrypt_with_config};
+use ecies_post_quantum::{Error, PublicKey, SecretKey, Seed, decrypt_with_config, encrypt_with_config};
+
+type KeyPair = (SecretKey, PublicKey);
 
 const SCAN_SIZE: usize = 512 * 1024;
 const PAD_SIZE: usize = 16 * 1024;
@@ -331,6 +333,15 @@ fn run_suite(measure_only: bool, filter: Option<&str>) -> ExitCode {
     let mut max_outer_frame = 0usize;
     let mut max_below_wipe = 0usize;
     let mut cases_run = 0usize;
+
+    // The public functions, as pointers whose value the optimizer can't see. Under LTO, a direct call can be inlined
+    // into `call_under_pad`, whose frame lies above `sp_before`, and the scan would then miss the public function's
+    // own frame.
+    let generate_seed = black_box(generate_seed as fn() -> Result<Seed, Error>);
+    let keypair_from_seed = black_box(keypair_from_seed as fn(AsymmetricAlgorithm, &[u8; 64]) -> KeyPair);
+    let generate_keypair = black_box(generate_keypair as fn(AsymmetricAlgorithm) -> Result<KeyPair, Error>);
+    let encrypt_with_config = black_box(encrypt_with_config as fn(&[u8], &[u8], &Config) -> Result<Vec<u8>, Error>);
+    let decrypt_with_config = black_box(decrypt_with_config as fn(&[u8], &[u8], &Config) -> Result<Vec<u8>, Error>);
 
     // Warm up dynamic linker / PLT entries (e.g. bzero/memset) before probing.
     let _ = keypair_from_seed(AsymmetricAlgorithm::MlKem768, &KNOWN_SEED);
