@@ -15,6 +15,7 @@ pub mod utils;
 mod error;
 mod kem;
 mod keys;
+mod stack;
 mod symmetric;
 
 use alloc::vec::Vec;
@@ -40,15 +41,17 @@ pub fn decrypt(receiver_sk: &[u8], msg: &[u8]) -> Result<Vec<u8>, Error> {
 ///
 /// Returns `ML-KEM ciphertext || nonce || tag || encrypted`.
 pub fn encrypt_with_config(receiver_pk: &[u8], msg: &[u8], config: &Config) -> Result<Vec<u8>, Error> {
-    let (mut payload, shared_secret) = kem::encapsulate(config.asymmetric_algorithm, receiver_pk)?;
-    symmetric::sym_encrypt_into(
-        &mut payload,
-        config.symmetric_algorithm,
-        config.symmetric_nonce_length,
-        &shared_secret[..],
-        msg,
-    )?;
-    Ok(payload)
+    stack::with_stack_wipe(|| {
+        let (mut payload, shared_secret) = kem::encapsulate(config.asymmetric_algorithm, receiver_pk)?;
+        symmetric::sym_encrypt_into(
+            &mut payload,
+            config.symmetric_algorithm,
+            config.symmetric_nonce_length,
+            &shared_secret[..],
+            msg,
+        )?;
+        Ok(payload)
+    })
 }
 
 /// Decrypts a payload from [`encrypt_with_config`] using the same `config` and the receiver's secret key (either the
@@ -60,12 +63,14 @@ pub fn decrypt_with_config(receiver_sk: &[u8], msg: &[u8], config: &Config) -> R
     }
 
     let (ciphertext, encrypted) = msg.split_at(ciphertext_length);
-    let shared_secret = kem::decapsulate(config.asymmetric_algorithm, receiver_sk, ciphertext)?;
-    symmetric::sym_decrypt(
-        config.symmetric_algorithm,
-        config.symmetric_nonce_length,
-        &shared_secret[..],
-        encrypted,
-    )
-    .ok_or(Error::InvalidMessage)
+    stack::with_stack_wipe(|| {
+        let shared_secret = kem::decapsulate(config.asymmetric_algorithm, receiver_sk, ciphertext)?;
+        symmetric::sym_decrypt(
+            config.symmetric_algorithm,
+            config.symmetric_nonce_length,
+            &shared_secret[..],
+            encrypted,
+        )
+        .ok_or(Error::InvalidMessage)
+    })
 }

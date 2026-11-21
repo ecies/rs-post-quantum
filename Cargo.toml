@@ -1,6 +1,6 @@
 [package]
 name = "ecies-post-quantum"
-version = "0.1.0"
+version = "0.1.1"
 # docs
 authors = ["Weiliang Li <to.be.impressive@gmail.com>"]
 description = "Post-quantum Cryptography Integrated Encryption Scheme in Rust"

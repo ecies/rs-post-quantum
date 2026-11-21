@@ -105,7 +105,7 @@ assert_eq!(decrypt(seed.as_bytes(), &encrypted).unwrap(), b"hello");
 Keep these details in mind when working with seeds:
 
 - **Track the parameter set:** a seed does not record which ML-KEM parameter set it belongs to, so derive keys and decrypt with the same `AsymmetricAlgorithm`.
-- **Performance & stack copies:** passing a seed directly to `decrypt` re-expands the secret key on every call. If you decrypt many messages in memory, expand it once with `keypair_from_seed` and reuse the `SecretKey` — this is faster and leaves fewer copies of key material on the stack (see [Secret material](#secret-material)).
+- **Performance:** passing a seed directly to `decrypt` re-expands the secret key on every call. If you decrypt many messages in memory, expand it once with `keypair_from_seed` and reuse the `SecretKey`.
 - **JavaScript interop:** `keypair_from_seed` matches `keygen(seed)` in [`@noble/post-quantum`](https://github.com/paulmillr/noble-post-quantum). Unlike Rust's `decrypt`, `@ecies/post-quantum`'s `decrypt` only accepts the expanded secret key, so expand the seed in JS first.
 
 ## API overview
@@ -176,6 +176,7 @@ Key generation and encryption rely on [`getrandom`](https://docs.rs/getrandom), 
   ```
 
 - **Embedded and custom runtimes (e.g., `thumbv7em-none-eabihf`):** select one of `getrandom`'s [opt-in backends](https://docs.rs/getrandom/latest/getrandom/#opt-in-backends), such as `custom`. A backend must be configured even for decrypt-only builds — with `unsupported`, decryption succeeds while key generation and encryption return `Error::RngFailure`.
+- **Stack size:** key generation, encryption, and decryption each wipe **80 KiB** of stack via `zeroize::zeroize_stack` before returning. Callers — especially on `no_std` targets without stack guard pages, where a stack overflow silently corrupts adjacent memory — should ensure at least **84 KiB** of free stack space before calling into this crate in optimized builds. Unoptimized debug builds need far more: up to about 500 KiB on x86_64 and 350 KiB on aarch64.
 
 CI runs the test suite on `wasm32-unknown-unknown` under Node.js and checks compilation for `wasm32-wasip2`.
 
@@ -207,13 +208,14 @@ The 32-byte ML-KEM shared secret is used directly as the AEAD key (without HKDF)
 
 - `SecretKey` and `Seed` are wiped on drop (`Seed` is heap-allocated so moving it does not copy its bytes).
 - Shared secrets, per-encryption randomness, and the expanded-key copy passed into `libcrux` during decryption are wiped after use.
+- Key derivation (`generate_keypair`, `keypair_from_seed`), encryption (`encrypt`, `encrypt_with_config`), and decryption (`decrypt`, `decrypt_with_config`, including failed decryptions after decapsulation) run inside an `#[inline(never)]` frame followed by `zeroize::zeroize_stack` (80 KiB). This wipes the stack frames left by `libcrux`, the symmetric ciphers, and this crate in optimized builds (verified in CI on `x86_64`/AVX2, `aarch64`/NEON, `opt-level = "s"`, LTO, and `libcrux`'s portable path).
 
-**Known limitations:**
+**Known limitations (out of reach of stack wiping):**
 
-- `libcrux` takes seeds and randomness by value and does not zeroize its internal key types, and stack frames (in `libcrux`, the symmetric ciphers, and this crate) are not wiped.
-- As a result, copies of secrets can remain on the stack — including shared secrets, parts of the secret key (such as `z`) after decryption, and expanded-key material whenever a key pair is derived from a seed (`generate_keypair`, `keypair_from_seed`, and `decrypt` with a seed).
-- Debug builds can leave more copies behind, sometimes including whole copies of the expanded key after decrypting with it (see [#4](https://github.com/ecies/rs-post-quantum/issues/4)).
-- Any copies of seed bytes that your application creates or persists are your responsibility to protect.
+- **Best-effort guarantee:** `zeroize::zeroize_stack` relies on `#[inline(never)]` not being ignored by the compiler and on stack usage staying within 80 KiB. Unoptimized debug builds use much deeper frames, so copies of secrets, including whole expanded keys, remain deeper than the 80 KiB the wipe covers.
+- **CPU and vector registers:** registers can still hold key material after a call returns, and a later signal handler may save them to the stack.
+- **WASM locals:** on WebAssembly, the wipe only covers the linear-memory shadow stack; values the engine keeps in WASM locals live on its own stack and are out of reach.
+- **Caller copies:** any copies of keys, seeds, or plaintexts that your application creates or persists remain your responsibility to protect.
 
 ### Dependencies and audits
 
@@ -232,15 +234,15 @@ cargo bench --features aes-openssl
 
 The suite benchmarks key generation for each ML-KEM level, plus encryption and decryption of 32 B, 100 MiB, and 200 MiB messages using the default AES-256-GCM configuration.
 
-Measured on an Apple M4 (24 GiB, macOS 26.7) with Rust 1.100.0 and Homebrew OpenSSL 4.1 (2026-11-20):
+Measured on an Apple M4 (24 GiB, macOS 26.7) with Rust 1.100.0 and Homebrew OpenSSL 4.1 (2026-11-21):
 
-**Small messages and key generation** (OpenSSL AES results are within 0.6 µs):
+**Small messages and key generation** (OpenSSL AES results are within 0.3 µs):
 
 | Pure Rust AES | ML-KEM-512 | ML-KEM-768 | ML-KEM-1024 |
 | --- | --- | --- | --- |
-| Key generation | 6.7 µs | 12.5 µs | 18.8 µs |
-| Encrypt 32 B | 6.9 µs | 11.3 µs | 15.4 µs |
-| Decrypt 32 B | 6.6 µs | 11.5 µs | 16.2 µs |
+| Key generation | 7.6 µs | 13.7 µs | 19.9 µs |
+| Encrypt 32 B | 7.7 µs | 12.0 µs | 16.4 µs |
+| Decrypt 32 B | 7.4 µs | 12.2 µs | 16.9 µs |
 
 **Large messages** (ML-KEM-768; AES-256-GCM and memory copying dominate, so ML-KEM-512 and ML-KEM-1024 are within 4%):
 
