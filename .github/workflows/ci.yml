@@ -248,3 +248,8 @@ jobs:
       - name: Probe (portable libcrux)
         run: LIBCRUX_DISABLE_SIMD128=1 LIBCRUX_DISABLE_SIMD256=1 cargo run --release --target-dir target/portable
         working-directory: tests/stack-probe
+
+      # debug builds reach deeper than the wipe, so this only prints how deep each call goes (the README's debug figure)
+      - name: Probe (debug, measure only)
+        run: cargo run -- --measure
+        working-directory: tests/stack-probe
